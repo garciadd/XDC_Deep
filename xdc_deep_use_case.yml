@@ -65,7 +65,7 @@ topology_template:
       type: string
       description: default command to run
       required: yes
-      default: "jupyter notebook --ip=0.0.0.0 --port=8888"
+      default: "/srv/.jupyter/run_jupyter.sh --allow-root"
  
   node_templates:
     Docker:
@@ -116,4 +116,4 @@ topology_template:
     command:
       value: { get_input: run_command }
     jupyter_endpoint:
-      value:  { concat: [ 'http://', { get_attribute : [ marathon, load_balancer_ips, 0 ] }, ':', { get_attribute : [ Docker, host, publish_ports, 2, target ] } ] }
+      value:  { concat: [ 'http://', { get_attribute : [ marathon, load_balancer_ips, 0 ] }, ':', { get_attribute : [ Docker, host, publish_ports, 0, target ] } ] }

@@ -11,12 +11,11 @@ LABEL version='0.0.1'
 ## Project to provide data from Sentinel-2 or Landsat 8 satellite
 ## Project to perform super-resolution on satellite imagery
 
-## Install tools
+## Install ubuntu updates and python
 RUN  apt-get update && \
   apt-get install -y --reinstall build-essential && \
     apt-get install -y git && \
     apt-get install -y curl python3-setuptools python3-pip python3-wheel
-
 
 ## Install spatial packages (python APIs)
 #Install gdal
@@ -30,7 +29,10 @@ RUN apt-get install -y python3-netcdf4
 ## Python package
 RUN pip3 install xmltodict
 
-## Onedata
+# Set the working directory
+WORKDIR /srv
+
+## Install Onedata
 RUN exec 3<> /etc/apt/sources.list.d/onedata.list && \
     echo "deb [arch=amd64] http://packages.onedata.org/apt/ubuntu/1902 xenial main" >&3 && \
     echo "deb-src [arch=amd64] http://packages.onedata.org/apt/ubuntu/1902 xenial main" >&3 && \
@@ -38,11 +40,16 @@ RUN exec 3<> /etc/apt/sources.list.d/onedata.list && \
 RUN curl http://packages.onedata.org/onedata.gpg.key | apt-key add -
 RUN apt-get update && curl http://packages.onedata.org/onedata.gpg.key | apt-key add -
 RUN apt-get install oneclient=19.02.1-1~xenial -y
+RUN mkdir -p /mnt/onedata
+
+## Install Jupyterlab
+ENV JUPYTER_CONFIG_DIR /srv/.jupyter/
+ENV SHELL /bin/bash
+RUN pip3 --no-cache-dir install jupyter jupyterlab && \
+    python3 -m ipykernel.kernelspec
 
 ## GitHUB Repositories
 RUN mkdir wq_sat
-
-RUN ls
 
 # What user branch to clone (!)
 ARG branch=master
@@ -53,14 +60,6 @@ RUN cd ./wq_sat && \
 
 ## Create config file
 RUN exec 3<> ./wq_sat/sat/sat_modules/config.py && \
-    echo "#Onedata config" >&3 && \
-    echo "onedata_mode = 1" >&3 && \
-    echo "onedata_token = \"$ONEDATA_TOKEN\"" >&3 && \
-    echo "onedata_url = \"https://vm027.pub.cloud.ifca.es\"" >&3 && \
-    echo "onedata_api = \"/api/v3/oneprovider/\"" >&3 && \
-    echo "onedata_user = \"user\"" >&3 && \
-    echo "onedata_space = \"XDC_LifeWatch\"" >&3 && \
-    echo "datasets_path = \"/onedata/output/XDC_LifeWatch\"" >&3 && \
     echo "#Sentinel credentials" >&3 && \
     echo "sentinel_pass = {'username':\"lifewatch\", 'password':\"xdc_lfw_data\"}" >&3 && \
     echo "#Landsat credentials" >&3 && \
@@ -78,19 +77,7 @@ RUN cd ./wq_sat && \
     cd  atcor && \
     python3 setup.py install
 
-
-# clone and Install atcor package
-RUN cd ./wq_sat && \
-    git clone -b $branch https://github.com/garciadd/wq_server.git
-
-
-### Jupyterlab
-RUN pip3 --no-cache-dir install jupyter jupyterlab && \
-    python3 -m ipykernel.kernelspec
-
-
 ## For Jupyter terminal
-ENV SHELL /bin/bash
 EXPOSE 8888
 
 # Open Jupyter port
