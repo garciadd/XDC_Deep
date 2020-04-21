@@ -46,7 +46,7 @@ RUN mkdir -p /mnt/onedata
 ENV JUPYTER_CONFIG_DIR /srv/.jupyter/
 ENV SHELL /bin/bash
 RUN pip3 --no-cache-dir install jupyter jupyterlab && \
-    python3 -m ipykernel.kernelspec
+    git clone https://github.com/deephdc/deep-jupyter /srv/.jupyter
 
 ## GitHUB Repositories
 RUN mkdir wq_sat
