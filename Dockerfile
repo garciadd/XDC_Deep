@@ -15,7 +15,7 @@ LABEL version='0.0.1'
 RUN  apt-get update && \
   apt-get install -y --reinstall build-essential && \
     apt-get install -y git && \
-    apt-get install -y curl python3-setuptools python3-pip python3-wheel
+    apt-get install -y curl wget python3-setuptools python3-pip python3-wheel
 
 ## Install spatial packages (python APIs)
 #Install gdal
@@ -90,6 +90,12 @@ RUN cd ./wq_sat && \
     git clone -b $branch https://github.com/garciadd/atcor.git && \
     cd  atcor && \
     python3 setup.py install
+
+#frontend
+RUN wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/job.sh && \
+    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/regions.json && \
+    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/xdc_sat.ipynb && \
+    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/xdc_sat_nb.py
 
 ## For Jupyter terminal
 EXPOSE 8888
