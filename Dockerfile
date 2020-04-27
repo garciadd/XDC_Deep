@@ -92,10 +92,10 @@ RUN cd ./wq_sat && \
     python3 setup.py install
 
 #frontend
-RUN wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/job.sh && \
-    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/regions.json && \
-    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/xdc_sat.ipynb && \
-    wget https://github.com/garciadd/XDC_Deep/blob/master/frontend/xdc_sat_nb.py
+RUN wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/job.sh && \
+    wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/regions.json && \
+    wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/xdc_sat.ipynb && \
+    wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/xdc_sat_nb.py
 
 ## For Jupyter terminal
 EXPOSE 8888
