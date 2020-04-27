@@ -27,7 +27,7 @@ RUN apt-get update -y
 RUN apt-get install -y python3-netcdf4
 
 ## Python package
-RUN pip3 install xmltodict
+RUN pip3 install xmltodict matplotlib ipyleaflet
 
 # Set the working directory
 WORKDIR /srv
@@ -47,6 +47,20 @@ ENV JUPYTER_CONFIG_DIR /srv/.jupyter/
 ENV SHELL /bin/bash
 RUN pip3 --no-cache-dir install jupyter jupyterlab && \
     git clone https://github.com/deephdc/deep-jupyter /srv/.jupyter
+
+## Habilitar extensiones en Jupyter
+RUN apt update -y
+RUN apt install build-essential apt-transport-https lsb-release ca-certificates curl -y
+# instalar node.js >= 10.0.0
+RUN curl -sL https://deb.nodesource.com/setup_10.x | bash - && \
+    apt-get install nodejs -y
+
+#instalar npm
+RUN curl -L https://npmjs.org/install.sh | sh
+
+#Habilitar extensiones
+RUN jupyter labextension install @jupyter-widgets/jupyterlab-manager
+RUN jupyter labextension install jupyter-leaflet
 
 ## GitHUB Repositories
 RUN mkdir wq_sat
