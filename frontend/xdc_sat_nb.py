@@ -111,9 +111,7 @@ def load_s2_file(zip_path):
     else:
         raise ValueError('No .xml file found.')
 
-    bands = {10: ['B4', 'B3', 'B2', 'B8'],
-             20: ['B5', 'B6', 'B7', 'B8A', 'B11', 'B12'],
-             60: ['B1', 'B9', 'B10']}
+    bands = {60: ['B1', 'B9', 'B10']}
         
     raster = gdal.Open(xml_path)
     datasets = raster.GetSubDatasets()
@@ -127,9 +125,12 @@ def load_s2_file(zip_path):
                 print('Loading bands of Resolution {}'.format(res))
 
                 ds_bands = gdal.Open(dsname)
+                print (ds_bands)
                 data_bands = ds_bands.ReadAsArray()
+                print (data_bands)
                 
                 for i, band in enumerate(bands[res]):
+                    print (band)
                     arr_bands[band] = data_bands[i] / 10000
     
     return arr_bands
@@ -296,28 +297,25 @@ def region_on_change(v):
     local_path = mount_onedata()
     region_path = os.path.join(local_path, v['new'])
         
-    s2_files = [os.path.basename(x) for x in glob.glob("{}/*.zip".format(region_path))]
-    l8_files = [os.path.basename(x) for x in glob.glob("{}/*.gz".format(region_path))]
-    zip_files = s2_files + l8_files
-        
-    zip_file = widgets.SelectMultiple(options=zip_files,
-                             value=tuple(zip_files[:1]),
-                             description='raw_files',
+    s2_files = [os.path.basename(x) for x in glob.glob("{}/*.zip".format(region_path))]        
+    zip_file = widgets.SelectMultiple(options=s2_files,
+                             value=tuple(s2_files[:1]),
+                             description='raw files',
                              disabled=False,
                              layout=Layout(width='90%'),
-                             rows=len(zip_files))
+                             rows=len(s2_files))
     
     preprocessbutton = widgets.Button(description='preprocess')
     
     tif_files = [os.path.basename(x) for x in glob.glob("{}/*.tiff".format(region_path))]
-    nc_file = widgets.Select(options=preprocessed_files,
-                             value=None,
-                             description='raw_files',
-                             disabled=False,
-                             layout=Layout(width='90%'))
+    files = widgets.Select(options=tif_files,
+                           value=None,
+                           description='preprocessed files',
+                           disabled=False,
+                           layout=Layout(width='90%'))
     
     hbox = HBox(children=[zip_file, preprocessbutton])
-    preprocessing = VBox(children=[region, hbox, nc_file])
+    preprocessing = VBox(children=[region, hbox, files])
     user_interface.children = [ingestion, preprocessing, visualization]
     display(user_interface)
     
@@ -353,11 +351,31 @@ def file_on_change(v):
     
     tif_path = os.path.join(region_path, v['new'])
     sr_bands = load_tiff_file(tif_path)
-    print (sr_bands)
     
-    zip_path = os.path.splitext(tif_path)[0] + '.zip'
-    arr_bands = load_s2_file(zip_path)
-    print (arr_bands)
+    for band in list(sr_bands.keys()):
+        
+        vmin, vmax, mean, std = np.amin(sr_bands[band]), np.amax(sr_bands[band]), np.mean(sr_bands[band]), np.std(sr_bands[band])
+        stats = "STATS; min = {}, Max = {}, mean = {}, std = {}".format(vmin, vmax, mean, std)
+        
+        plt.figure(figsize=(6,6))
+        
+        # Plot the image
+        plt.imshow(sr_bands[band], vmin=vmin, vmax=vmax, cmap='Greys')
+
+        # Add a colorbar
+        plt.colorbar(label='Brightness', extend='both', orientation='vertical', pad=0.05, fraction=0.05)
+
+        # Title axis
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.tick_params(axis='both', which='both', bottom=False, top=False, right=False, left=False, labelbottom=False, labelleft=False)
+
+        # Add a title
+        plt.title(band, fontweight='bold', fontsize=10, loc='left')
+        plt.suptitle(stats, x=0.92, y=0.92, fontsize='large')
+        
+        # Show the image
+        plt.show()
 
     
 def region_on_change(v):
