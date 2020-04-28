@@ -5,17 +5,17 @@ Author: Daniel Garcia Diaz
 Date: August 2018
 """
 #APIs
-import os
+import os, re
 import glob
 import requests
 import argparse
 import json
-from netCDF4 import Dataset
 from osgeo import gdal, osr
 import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import subprocess
+from zipfile import ZipFile
 
 from urllib.parse import urlencode
 from urllib.parse import quote, quote_plus
@@ -71,7 +71,68 @@ def satellite_args(inidate, enddate, region, coord, cloud, output_path):
 
 def mount_onedata():
     #mount onedata
-    subprocess.Popen('/srv/job.sh', stdin=subprocess.PIPE)
+    onedata_path = '/mnt/onedata/XDC_LifeWatch'
+    if not (os.path.isdir(onedata_path)):
+        print ('Mounting ondedata space {}'.format('XDC_Lifewatch'))
+        subprocess.Popen('/srv/job.sh', stdin=subprocess.PIPE)
+     
+    return onedata_path
+
+def load_tiff_file(tif_path):
+    
+    src_ds = gdal.Open(tif_path)
+    sr_bands = {}
+    for band in range(src_ds.RasterCount):
+        band += 1
+        srcband = src_ds.GetRasterBand(band)
+        
+        if srcband is None:
+            continue
+
+        name = srcband.GetDescription()
+        arr = srcband.ReadAsArray()
+        sr_bands[name] = arr
+        
+    return sr_bands
+
+def load_s2_file(zip_path):
+    
+    tile_path = os.path.splitext(zip_path)[0] + '.SAFE'
+    if not (os.path.isdir(tile_path)):
+        with ZipFile(zip_path, 'r') as zipObj:
+            # Extract all the contents of zip file in different directory
+            zipObj.extractall(region_path)
+        
+    # Process input tile name
+    r = re.compile("^MTD_(.*?)xml$")
+    matches = list(filter(r.match, os.listdir(tile_path)))
+    if matches:
+        xml_path = os.path.join(tile_path, matches[0])
+    else:
+        raise ValueError('No .xml file found.')
+
+    bands = {10: ['B4', 'B3', 'B2', 'B8'],
+             20: ['B5', 'B6', 'B7', 'B8A', 'B11', 'B12'],
+             60: ['B1', 'B9', 'B10']}
+        
+    raster = gdal.Open(xml_path)
+    datasets = raster.GetSubDatasets()
+
+    for dsname, dsdesc in datasets:
+        
+        arr_bands = {}
+        for res in bands.keys():
+            if '{}m resolution'.format(res) in dsdesc:
+                
+                print('Loading bands of Resolution {}'.format(res))
+
+                ds_bands = gdal.Open(dsname)
+                data_bands = ds_bands.ReadAsArray()
+                
+                for i, band in enumerate(bands[res]):
+                    arr_bands[band] = data_bands[i] / 10000
+    
+    return arr_bands
 
 ############################## MENU ##################################
 
@@ -136,8 +197,9 @@ mapgrid = GridspecLayout(2, 2)
 mapgrid[:, 0], mapgrid[:, 1] = m, tab
 
 def regionbutton_clicked(namebutton):
+    global output_path
 
-    local_path = '/mnt/onedata/XDC_LifeWatch'
+    local_path = mount_onedata()
     output_path = os.path.join(local_path, name.value)
     
     #load the downloaded files
@@ -172,8 +234,6 @@ def mapbutton_clicked(mapbutton):
     coord = get_coordinates(draw_control.last_draw['geometry']['coordinates'][0])
     inidate = (ini_date.value).strftime('%Y-%m-%d')
     enddate = (end_date.value).strftime('%Y-%m-%d')
-    local_path = '/mnt/onedata/XDC_LifeWatch'
-    output_path = os.path.join(local_path, region.value)
     
     s2_args, l8_args = satellite_args(inidate, enddate, name.value, coord, cloud.value, output_path)
         
@@ -194,9 +254,11 @@ mapbutton.on_click(mapbutton_clicked)
 def preprocessbutton_clicked(preprocessbutton):
     
     region = region_path.split('/')[-1]
+    
     #load the downloaded files
     with open('regions.json') as file:
         regions = json.load(file)
+    
     coord = regions[region]["coordinates"]
     coord = '[{},{},{},{}]'.format(coord['W'], coord['S'], coord['E'], coord['N'])
         
@@ -231,9 +293,7 @@ def region_on_change(v):
     
     clear_output()
     
-    local_path = '/mnt/onedata/XDC_LifeWatch'
-#    if not (os.path.isdir(local_path)):
-#        mount_onedata()
+    local_path = mount_onedata()
     region_path = os.path.join(local_path, v['new'])
         
     s2_files = [os.path.basename(x) for x in glob.glob("{}/*.zip".format(region_path))]
@@ -249,9 +309,7 @@ def region_on_change(v):
     
     preprocessbutton = widgets.Button(description='preprocess')
     
-    nc_files = [os.path.basename(x) for x in glob.glob("{}/*.nc".format(region_path))]
     tif_files = [os.path.basename(x) for x in glob.glob("{}/*.tiff".format(region_path))]
-    preprocessed_files = nc_files + tif_files
     nc_file = widgets.Select(options=preprocessed_files,
                              value=None,
                              description='raw_files',
@@ -288,189 +346,54 @@ preprocessing = preprocess_data(regions)
     
 ######################################
 #######  Data Visualization  #########
-######################################
-######################################## Utils ##########################################
-
-path = '/mnt/onedata/XDC_LifeWatch'
-
-paths = {'main_path': path}
-
-##################################### Functions for display Monochromatic band #########################################
-
-def plot_on_change(v):
-
-    dataset= Dataset(paths['band_path'], 'r', format='NETCDF4_CLASSIC')
-    data = dataset[v['new']][:]
-    vmin, vmax, mean, std = np.amin(data), np.amax(data), np.mean(data), np.std(data)
-    stats = "STATS; min = {}, Max = {}, mean = {}, std = {}".format(vmin, vmax, mean, std)
+######################################    
     
-    plt.figure(figsize=(7,7))
-    
-    with out_plot:
-        
-        clear_output()
-        
-        # Plot the image
-        plt.imshow(data, vmin=vmin, vmax=vmax, cmap='Greys')
 
-        # Add a colorbar
-        plt.colorbar(label='Brightness', extend='both', orientation='vertical', pad=0.05, fraction=0.05)
-
-        # Title axis
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.tick_params(axis='both', which='both', bottom=False, top=False, right=False, left=False, labelbottom=False, labelleft=False)
-
-        # Add a title
-        plt.title('{}'.format(v['new']), fontweight='bold', fontsize=10, loc='left')
-        plt.suptitle(stats, x=0.92, y=0.92, fontsize='large')
-        
-        # Show the image
-        plt.show()        
-
-        
 def file_on_change(v):
     
-    global out_plot
-    clear_output()
+    tif_path = os.path.join(region_path, v['new'])
+    sr_bands = load_tiff_file(tif_path)
+    print (sr_bands)
     
-    list_files = names = [os.path.basename(x) for x in glob.glob("{}/*.nc".format(paths['region_path']))]
-    list_files.sort()
-    
-    file = widgets.Dropdown(options=[list_files[n] for n in range(len(list_files))],
-                            value = v['new'],
-                            description='files:',)
-    
-    file.observe(file_on_change, names='value')
-    
-    top_box = HBox([file])
-        
-    band_path = os.path.join(paths['region_path'], v['new'])    
-    paths['band_path'] = band_path
-    
-    dataset= Dataset(paths['band_path'], 'r', format='NETCDF4_CLASSIC')
-    variables = dataset.variables
-    variables = list(variables.keys())
-    
-    var = []
-    for e in variables:
-        if e not in ('lat', 'lon', 'spatial_ref'):
-            var.append(e)
-    
-    bands = widgets.ToggleButtons(options=[var[n] for n in range(len(var))],
-                                  description='Bands:',
-                                  value = None,
-                                  button_style='',)
-    
-    bands.observe(plot_on_change, names='value')
-    
-    out_plot = widgets.Output()
-    
-    bottom_box = HBox([bands])
-    vbox = VBox([region, top_box, bottom_box, out_plot])
-    visualization.children = [vbox, RGB_image, animation]
-    user_interface.children = [ingestion, preprocessing, visualization]
-    display(user_interface)
+    zip_path = os.path.splitext(tif_path)[0] + '.zip'
+    arr_bands = load_s2_file(zip_path)
+    print (arr_bands)
 
     
 def region_on_change(v):
+    global region_path
     
-    global date, folders
     clear_output()
     
-    region_path = os.path.join(path, v['new'])
-    paths['region_path'] = region_path
-        
-    list_files = names = [os.path.basename(x) for x in glob.glob("{}/*.nc".format(paths['region_path']))]
-    list_files.sort()
+    local_path = mount_onedata()
+    region_path = os.path.join(local_path, v['new'])
     
-    file = widgets.Dropdown(options=[list_files[n] for n in range(len(list_files))],
-                            value = None,
-                            description='files:',)
+    tif_files = [os.path.basename(x) for x in glob.glob("{}/*.tiff".format(region_path))]
+    files = widgets.Dropdown(options=[tif_files[n] for n in range(len(tif_files))],
+                             value=None,
+                             description='files',)
     
-    file.observe(file_on_change, names='value')
+    files.observe(file_on_change, names='value')
     
-    top_box = HBox([file])
-
-    vbox = VBox([region, top_box])
-    visualization.children = [vbox, RGB_image, animation]
+    visualization = VBox(children=[region, files])
     user_interface.children = [ingestion, preprocessing, visualization]
     display(user_interface)
-    
-#################################################################################
-    
-def Monochromatic_band(regions):
-    
+
+def data_visualization(regions):
     global region
-        
-    #Drop down to choose the available region
-    region = widgets.Dropdown(options=[regions[n] for n in range(len(regions))],
-                              value = None,
-                              description='Available Regions:',)
-
-    region.observe(region_on_change, names='value')
-    vbox = VBox([region]) 
     
-    return vbox
-
-
-def RGB(regions):
-    
-    global region
-        
-    #Inicialización de widgets del menu
-    #widgets para escoger region
     region = widgets.Dropdown(options=[regions[n] for n in range(len(regions))],
                               value = None,
                               description='Available Regions:',)
     
     region.observe(region_on_change, names='value')
-    vbox = VBox([region]) 
     
-    return vbox
-
-
-def clip(regions):
-            
-    #Inicialización de widgets del menu
-    #widgets para escoger region
-    region = widgets.Dropdown(options=[regions[n] for n in range(len(regions))],
-                              value = None,
-                              description='Available Regions:',)
-
-    vbox = VBox([region]) 
-    
-    return vbox
-
-#####################################################################################
-
-def data_visualization():
-    
-    global visualization, Band, RGB_image, animation
-    clear_output()
-        
-    #load available regions
-    with open('regions.json') as data_file:
-        regions_file = json.load(data_file)
-    
-    regions = list(regions_file.keys())
-    
-    Band = Monochromatic_band(regions)
-    RGB_image = RGB(regions)
-    animation = clip(regions)
-    
-    #Menu
-    visualization = widgets.Tab()
-    visualization.children = [Band, RGB_image, animation]
-    visualization.set_title(0, 'Monochromatic Band')
-    visualization.set_title(1, 'RGB image')
-    visualization.set_title(2, 'Animations')
-    
+    visualization = VBox(children=[region])    
     return visualization
 
+visualization = data_visualization(regions)
 
-visualization = data_visualization()
-    
+
 #Menu
 user_interface = widgets.Tab()
 user_interface.children = [ingestion, preprocessing, visualization]
