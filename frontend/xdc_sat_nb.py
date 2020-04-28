@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import subprocess
 
+from urllib.parse import urlencode
+from urllib.parse import quote, quote_plus
+
 #Map
 from ipyleaflet import Map, basemaps, basemap_to_tiles, DrawControl
 
@@ -188,7 +191,43 @@ mapbutton.on_click(mapbutton_clicked)
 #######  Preprocessing  #########
 ######################################
 
+def preprocessbutton_clicked(preprocessbutton):
+    
+    region = region_path.split('/')[-1]
+    #load the downloaded files
+    with open('regions.json') as file:
+        regions = json.load(file)
+    coord = regions[region]["coordinates"]
+    coord = '[{},{},{},{}]'.format(coord['W'], coord['S'], coord['E'], coord['N'])
+        
+    # Deployment Orchestrator (temporal)
+    api_url = 'http://193.146.75.183:10031/v2/models/satsr/predict/'
+    
+    for file in zip_file.value:
+        
+        print ('Preprocessing {} ...'.format(file))
+        
+        path = os.path.join(region_path, file)
+        outpath = os.path.splitext(path)[0] + '.tiff'
+
+        query = {'accept': 'image/tiff',
+                 'satellite': '"sentinel2"',
+                 'roi_x_y_test': 'null',
+                 'roi_lon_lat_test': coord,
+                 'max_res_test': 'null',
+                 'copy_original_bands': 'true',
+                 'output_file_format': '"GTiff"',
+                 'output_path': 'null'}
+
+        url = api_url + '?' + urlencode(query).replace('+', '%20')
+
+        r = subprocess.run('curl -X POST "{}" -H "accept: image/tiff" -H "Content-Type: multipart/form-data" -F "data=@{};type=application/zip"'.format(url, path), shell=True, check=True, stdout=subprocess.PIPE).stdout
+
+        with open(outpath, 'wb') as f:
+            f.write(r)
+
 def region_on_change(v):
+    global region_path, zip_file
     
     clear_output()
     
@@ -208,17 +247,23 @@ def region_on_change(v):
                              layout=Layout(width='90%'),
                              rows=len(zip_files))
     
-    preprocessed_files = [os.path.basename(x) for x in glob.glob("{}/*.nc".format(region_path))]
+    preprocessbutton = widgets.Button(description='preprocess')
     
+    nc_files = [os.path.basename(x) for x in glob.glob("{}/*.nc".format(region_path))]
+    tif_files = [os.path.basename(x) for x in glob.glob("{}/*.tiff".format(region_path))]
+    preprocessed_files = nc_files + tif_files
     nc_file = widgets.Select(options=preprocessed_files,
                              value=None,
                              description='raw_files',
                              disabled=False,
                              layout=Layout(width='90%'))
     
-    preprocessing = VBox(children=[region, zip_file, nc_file])
+    hbox = HBox(children=[zip_file, preprocessbutton])
+    preprocessing = VBox(children=[region, hbox, nc_file])
     user_interface.children = [ingestion, preprocessing, visualization]
     display(user_interface)
+    
+    preprocessbutton.on_click(preprocessbutton_clicked)
     
     
 #load available regions
