@@ -91,6 +91,8 @@ RUN cd ./wq_sat && \
     cd  atcor && \
     python3 setup.py install
 
+RUN ls
+
 #frontend
 RUN wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/job.sh && \
     wget https://raw.githubusercontent.com/garciadd/XDC_Deep/master/frontend/regions.json && \
