@@ -116,21 +116,16 @@ def load_s2_file(zip_path):
     raster = gdal.Open(xml_path)
     datasets = raster.GetSubDatasets()
 
-    for dsname, dsdesc in datasets:
-        
-        arr_bands = {}
-        for res in bands.keys():
+    arr_bands = {}
+    for res in bands.keys():
+        for dsname, dsdesc in datasets:
             if '{}m resolution'.format(res) in dsdesc:
                 
                 print('Loading bands of Resolution {}'.format(res))
-
                 ds_bands = gdal.Open(dsname)
-                print (ds_bands)
                 data_bands = ds_bands.ReadAsArray()
-                print (data_bands)
-                
+
                 for i, band in enumerate(bands[res]):
-                    print (band)
                     arr_bands[band] = data_bands[i] / 10000
     
     return arr_bands
@@ -352,30 +347,33 @@ def file_on_change(v):
     tif_path = os.path.join(region_path, v['new'])
     sr_bands = load_tiff_file(tif_path)
     
-    for band in list(sr_bands.keys()):
+    zip_path = os.path.splitext(tif_path)[0] + '.zip'
+    arr_bands = load_s2_file(zip_path)
+    
+    sr_name = {'B9': 'SRB9 (945 nm)'}
+
+    for band in list(sr_name.keys()):
         
-        vmin, vmax, mean, std = np.amin(sr_bands[band]), np.amax(sr_bands[band]), np.mean(sr_bands[band]), np.std(sr_bands[band])
-        stats = "STATS; min = {}, Max = {}, mean = {}, std = {}".format(vmin, vmax, mean, std)
-        
-        plt.figure(figsize=(6,6))
-        
+        print (band)
+
+        sr_band = sr_name[band]
+        sr_arr = sr_bands[sr_band][:600, :600]
+
+        arr_n = arr_bands[band][1020:1120, 250:350]
+
+        fig, axs = plt.subplots(1, 2, figsize=(20, 20))
+        axs = axs.flatten()
+
         # Plot the image
-        plt.imshow(sr_bands[band], vmin=vmin, vmax=vmax, cmap='Greys')
+        axs[0].imshow(sr_arr, cmap='Greys', origin='lower left')
+        axs[0].set_title(sr_band, fontweight='bold', fontsize=10, loc='left')
 
-        # Add a colorbar
-        plt.colorbar(label='Brightness', extend='both', orientation='vertical', pad=0.05, fraction=0.05)
+        # Plot the image
+        axs[1].imshow(arr_n, cmap='Greys', origin='lower left')
+        axs[1].set_title(band, fontweight='bold', fontsize=10, loc='left')
 
-        # Title axis
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.tick_params(axis='both', which='both', bottom=False, top=False, right=False, left=False, labelbottom=False, labelleft=False)
-
-        # Add a title
-        plt.title(band, fontweight='bold', fontsize=10, loc='left')
-        plt.suptitle(stats, x=0.92, y=0.92, fontsize='large')
-        
         # Show the image
-        plt.show()
+        fig.show()
 
     
 def region_on_change(v):
